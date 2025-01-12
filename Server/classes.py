@@ -1,4 +1,7 @@
+import os
 import pickle
+from typing import Optional
+from pypdf import PdfReader
 import requests
 import json
 
@@ -45,6 +48,25 @@ class ChemrxivItem:
         )
     def to_pickle(self):
         return pickle.dumps(self)
+        
+    def get_pdf_with_text(self) -> Optional[str]:
+        if os.path.exists(f"{self.title}.pdf"):
+            pass
+        else:
+            url = self.asset.original.url
+            response = requests.get(url)
+            with open(f"{self.title}.pdf", "wb") as f:
+                f.write(response.content)
+        try:
+            with open(f"{self.title}.pdf", "rb") as f:
+                pdf_reader = PdfReader(f)
+                paper = ""
+                for page in pdf_reader.pages:
+                    paper += page.extract_text()
+                return paper
+        except FileNotFoundError:
+            return None
+        
 
 
 class Subject:
@@ -112,6 +134,43 @@ class Metric:
         self.value = self.metric_data.get('value', 0)
         self.unit = self.metric_data.get('unit', '')
 
+from typing import List, Dict, Any, Optional
+
+class Article:
+    def __init__(self, article_data: Dict[str, Any]):
+        self.article_data: Dict[str, Any] = article_data
+        self.title: str = self.article_data.get('title', '')
+        self.description: str = self.article_data.get('description', '')
+        self.body: str = self.article_data.get('body', '')
+        self.image: Image = Image(self.article_data.get('image', {}))
+        self.authors: List[Author] = [Author(author_data) for author_data in self.article_data.get('authors', [])]
+        self.professor: Professor = Professor(self.article_data.get('professor', {}))
+        self.createdAt: str = self.article_data.get('createdAt', '')
+        self.publishedAt: str = self.article_data.get('publishedAt', '')
+        self.readingTime: int = self.article_data.get('readingTime', 0)
+        self.updatedAt: Optional[str] = self.article_data.get('updatedAt', None)
+        self.lastUpdatedAt: Optional[str] = self.article_data.get('lastUpdatedAt', None)
+
+class Image:
+    def __init__(self, image_data: Dict[str, Any]):
+        self.image_data: Dict[str, Any] = image_data
+        self.url: str = self.image_data.get('url', '')
+        self.alt: str = self.image_data.get('alt', '')
+        self.caption: str = self.image_data.get('caption', '')
+
+class Professor:
+    def __init__(self, professor_data: Dict[str, Any]):
+        self.professor_data: Dict[str, Any] = professor_data
+        self.name: str = self.professor_data.get('name', '')
+        self.professorBio: str = self.professor_data.get('professorBio', '')
+        self.slug: str = self.professor_data.get('slug', '')
+
+
+
+
+
+
+
 
 def get_items(number_of_items):
     items = []
@@ -175,3 +234,8 @@ def print_item(item: ChemrxivItem):
 
 def get_top_10_items_of_the_week():
     return get_all_items()[:10]
+
+
+
+
+

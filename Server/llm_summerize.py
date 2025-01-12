@@ -1,6 +1,9 @@
 
 import json
 from pprint import pprint
+import random
+import re
+from typing import Optional
 from dotenv import load_dotenv
 from google import genai
 import os
@@ -12,29 +15,13 @@ from classes import ChemrxivItem
 open_pickle_file = open("top_10_items_of_the_week.pkl", "rb")
 items = pickle.load(open_pickle_file)
 
-def get_pdf(item: ChemrxivItem):
-    if os.path.exists(f"{item.title}.pdf"):
-        pass
-    else:
-        url = item.asset.original.url
-        response = requests.get(url)
-        with open(f"{item.title}.pdf", "wb") as f:
-            f.write(response.content)
-    try:
-        with open(f"{item.title}.pdf", "rb") as f:
-            pdf_reader = PdfReader(f)
-            paper = ""
-            for page in pdf_reader.pages:
-                paper += page.extract_text()
-    except FileNotFoundError:
-        return "Error: PDF file not found."
-    return paper
-
-    
 
 def summerize_pdf(item: ChemrxivItem):
-    paper = get_pdf(item)
-    return send_to_llm('Explain the following chemistry paper to an undegrade student, write with 5 sentencesw:' + paper + 'in the format of a {response: ""}')
+    paper = item.get_pdf_with_text()
+    if paper:
+        return send_to_llm('Explain the following chemistry paper to an undegrade student, write with 5 sentencesw:' + paper + 'in the format of a {response: ""}')
+    else:
+        return "Error: PDF file not found."
 
 
 #TODO: Look into thing thing 
@@ -56,7 +43,9 @@ def summerize_pdf(item: ChemrxivItem):
 
 
 def generate_questions(item: ChemrxivItem):
-    paper = get_pdf(item)
+    paper = item.get_pdf_with_text()
+    if not paper:
+        return "Error: PDF file not found."
     generate_questions_prompt = """
 Generate 10 questions based on the paper and the following course content, the questions should be multiple choice questions with 4 answers, the answers should be in the format of a list of strings, the correct answer should be the first answer in the list, it also must be json format, 
 do not mention the course content in the response, do not respond with anything else than the json, it must be serializable by json.loads()
@@ -89,21 +78,34 @@ response:
 """ + paper
         
     responce = send_to_llm(generate_questions_prompt)
-
-    import re
-    json_pattern = re.compile(r'\{.*\}', re.DOTALL)
-    match = json_pattern.search(responce)
-    if match:
-        json_string = match.group(0)
-        try:
-            questions = json.loads(json_string)
-            return questions
-        except json.JSONDecodeError as e:
-            print(f"Error decoding JSON: {e}")
+    questions = extract_json(responce)
+    if questions:
+        return make_questions_from_json(questions)
     else:
         print("No JSON found in the response.")
 
 
+def make_questions_from_json(json_data: dict):
+    formatted_questions = []
+    for question, answers in json_data.items():
+        formatted_questions.append({
+            "question": question,
+            "answers": random.sample(answers, len(answers)),
+            "correct_answer": answers[0]
+        })
+    return formatted_questions
+
+
+def extract_json(response):
+    json_pattern = re.compile(r'\{.*\}', re.DOTALL)
+    match = json_pattern.search(response)
+    if match:
+        json_string = match.group(0)
+        return json.loads(json_string)
+    else:
+        return None
+    
+    
 
 def send_to_llm(context):
     load_dotenv(dotenv_path = ".env")
@@ -117,5 +119,6 @@ def send_to_llm(context):
 
 
 
-print(summerize_pdf(items[0]))
-print(json.dumps(generate_questions(items[0]), indent=4))
+# print(summerize_pdf(items[0]))
+print(generate_questions(items[0]))
+
