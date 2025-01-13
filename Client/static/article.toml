@@ -1,0 +1,23 @@
+title = "Default Title"
+description = "Default Description"
+body = "<p>Default Body</p>"
+createdAt = "2024-02-22T16:40:18.000Z" # Example date, replace with actual
+publishedAt = "2024-02-29T16:40:18.000Z" # Example date, replace with actual
+updatedAt = ""
+lastUpdatedAt = ""
+readingTime = 10
+
+[image]
+url = "https://placehold.co/600x400"
+alt = "Default Image"
+caption = "Default Caption"
+
+[[authors]]
+name = "Default Author"
+authorBio = "Default Author Bio"
+slug = "default-author"
+
+[professor]
+name = "Default Professor"
+professorBio = "Default Professor Bio"
+slug = "default-professor"

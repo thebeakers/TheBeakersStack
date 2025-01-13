@@ -137,20 +137,20 @@ class Metric:
 from typing import List, Dict, Any, Optional
 
 class Article:
-    def __init__(self, article_data: Dict[str, Any]):
-        self.article_data: Dict[str, Any] = article_data
-        self.title: str = self.article_data.get('title', '')
-        self.description: str = self.article_data.get('description', '')
-        self.body: str = self.article_data.get('body', '')
-        self.image: Image = Image(self.article_data.get('image', {}))
-        self.authors: List[Author] = [Author(author_data) for author_data in self.article_data.get('authors', [])]
-        self.professor: Professor = Professor(self.article_data.get('professor', {}))
-        self.createdAt: str = self.article_data.get('createdAt', '')
-        self.publishedAt: str = self.article_data.get('publishedAt', '')
-        self.readingTime: int = self.article_data.get('readingTime', 0)
-        self.updatedAt: Optional[str] = self.article_data.get('updatedAt', None)
-        self.lastUpdatedAt: Optional[str] = self.article_data.get('lastUpdatedAt', None)
-
+    def __init__(self, item: ChemrxivItem):
+        self.title = item.title
+        self.description = item.abstract
+        self.body = item.abstract
+        self.image = Image({'url': "https://placecat.com/640/360", 'alt': "A placeholder image of a cat", 'caption': "A cute cat"})
+        self.authors = [AuthorForFrontend(author) for author in item.authors]
+        self.professor = Professor({'name': "Dr. Fake Name", 'professorBio': "This is a fake professor bio.", 'slug': "fake-professor"})
+        self.createdAt = item.published_date
+        self.publishedAt = item.published_date
+        self.updatedAt = None
+        self.lastUpdatedAt = None
+    def write_to_toml(self, file_name: str):
+        with open(f"{file_name}.toml", "w") as f:
+            f.write(self.article_data)
 class Image:
     def __init__(self, image_data: Dict[str, Any]):
         self.image_data: Dict[str, Any] = image_data
@@ -158,12 +158,17 @@ class Image:
         self.alt: str = self.image_data.get('alt', '')
         self.caption: str = self.image_data.get('caption', '')
 
+class AuthorForFrontend:
+    def __init__(self, author_data: Author):
+        self.name: str = author_data.first_name + " " + author_data.last_name
+        self.authorBio: str = "This is a fake author bio."
+        self.slug: str = author_data.author_confirmation_id
+
 class Professor:
     def __init__(self, professor_data: Dict[str, Any]):
-        self.professor_data: Dict[str, Any] = professor_data
-        self.name: str = self.professor_data.get('name', '')
-        self.professorBio: str = self.professor_data.get('professorBio', '')
-        self.slug: str = self.professor_data.get('slug', '')
+        self.name: str = self.professor_data['name']
+        self.professorBio: str = self.professor_data['professorBio']
+        self.slug: str = self.professor_data['slug']
 
 
 
@@ -235,7 +240,9 @@ def print_item(item: ChemrxivItem):
 def get_top_10_items_of_the_week():
     return get_all_items()[:10]
 
-
+def export_to_frontend(item: ChemrxivItem):
+    article = Article(item)
+    article.write_to_toml("testing")
 
 
 

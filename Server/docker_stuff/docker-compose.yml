@@ -1,0 +1,28 @@
+version: "3.7"
+services:
+  pocketbase:
+    image: spectado/pocketbase:latest
+    container_name: pocketbase
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+      - "80:80"
+    volumes:
+      - ./pb_data:/pb_data
+      - ./pb_public:/pb_public
+      - ./pb_migrations:/pb_migrations
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.pocketbase.rule=Host(`pocketbase.local`)"
+    #   - "traefik.http.services.pocketbase.loadbalancer.server.port=80"
+    #   - "traefik.http.routers.pocketbaselocal.rule=Host(`pocketbaselocal.local`)"
+    #   - "traefik.http.services.pocketbaselocal.loadbalancer.server.port=8090"
+  # reverse-proxy:
+  #   image: traefik:v3.3
+  #   command: --api.insecure=true --providers.docker
+  #   ports:
+  #     - "80:80"
+  #     - "8080:8080"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+
