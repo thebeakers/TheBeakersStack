@@ -1,36 +1,11 @@
 <script lang="ts">
-    import type { Article } from '$lib/types';
-    import { parse } from 'toml';
-    import { onMount } from 'svelte';
-    // export let article: Article = TOML.parse(await fetch('/article.toml').then(res => res.text()));
+    import { deserializeArticleFromToml, type Article } from '$lib/types';
+    import articleToml from '../../../static/article.toml?raw';
 
-    let article: Article | null = null;
-    let errorMessage: string | null = null;
-    const fetchAndDeserializeToml = async (url: string): Promise<Article> => {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch TOML file: ${response.statusText}`);
-    }
+   
+    let article: Article | null = deserializeArticleFromToml(articleToml);
 
-    const tomlText = await response.text();
-    const parsedData = parse(tomlText); // Use the `parse` method from `toml`
-    console.log(parsedData);
-    return parsedData as unknown as Article;
-  } catch (error) {
-    console.error('Error deserializing TOML:', error);
-    throw error;
-  }
-};
-  onMount(async () => {
-    try {
-      article = await fetchAndDeserializeToml('/article.toml');
-    } catch (error) {
-      errorMessage = 'Failed to load article. Please try again later.';
-    }
-  });
 
-    
 
 </script>
 <main class="p-6 bg-gray-800 text-gray-100 font-serif min-h-screen">
