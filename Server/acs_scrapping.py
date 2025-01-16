@@ -20,4 +20,4 @@ for item in x:
     print(item.metrics)
     print(item.asset.original.url)
     print("\n")
-export_to_frontend(x[0])
+export_to_frontend(x[0], '../Client/static/testing')

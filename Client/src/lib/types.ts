@@ -12,7 +12,6 @@ export type Question = {
 export const deserializeArticleFromToml = (tomlText: string): Article => {
   try {
       const parsedData = parse(tomlText);
-      console.log(parsedData);
       return parsedData as unknown as Article;
   } catch (error) {
       console.error('Error deserializing TOML:', error);

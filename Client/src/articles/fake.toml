@@ -1,0 +1,44 @@
+title = "This is a fake article"
+description = "This is a fake description for a fake article."
+body = "This is the fake body of a fake article. It's all fake."
+createdAt = "2024-12-19T04:50:03.912Z"
+publishedAt = "2024-12-19T04:50:03.912Z"
+updatedAt = "None"
+lastUpdatedAt = "None"
+readingTime = 5
+
+[image]
+url = "https://loremflickr.com/1080/720"
+alt = "A placeholder image of a kitten"
+caption = "A cute kitten"
+
+
+[[authors]]
+name = "Fake Author 1"
+authorBio = "This is a fake author bio for author 1."
+slug = "fake-author-1"
+
+[[authors]]
+name = "Fake Author 2"
+authorBio = "This is a fake author bio for author 2."
+slug = "fake-author-2"
+
+[[authors]]
+name = "Fake Author 3"
+authorBio = "This is a fake author bio for author 3."
+slug = "fake-author-3"
+
+[[authors]]
+name = "Fake Author 4"
+authorBio = "This is a fake author bio for author 4."
+slug = "fake-author-4"
+
+[[authors]]
+name = "Fake Author 5"
+authorBio = "This is a fake author bio for author 5."
+slug = "fake-author-5"
+
+[professor]
+name = "Dr. Fake Professor"
+professorBio = "This is a fake professor bio."
+slug = "fake-professor"

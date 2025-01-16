@@ -38,7 +38,8 @@ class ChemrxivItem:
         self.metrics = [Metric(metric) for metric in self.item_data.get('metrics', [])]
         self.citations_count = self.item_data.get('citationsCount', 0)
         self.community = self.item_data.get('community', '')
-
+    def to_frontend_article(self):
+        return FrontendArticle(self)
     def __str__(self):
         return (
             f"Title: {self.title}\n"
@@ -48,7 +49,6 @@ class ChemrxivItem:
         )
     def to_pickle(self):
         return pickle.dumps(self)
-        
     def get_pdf_with_text(self) -> Optional[str]:
         if os.path.exists(f"{self.title}.pdf"):
             pass
@@ -136,39 +136,71 @@ class Metric:
 
 from typing import List, Dict, Any, Optional
 
-class Article:
+class FrontendArticle:
     def __init__(self, item: ChemrxivItem):
         self.title = item.title
         self.description = item.abstract
         self.body = item.abstract
-        self.image = Image({'url': "https://placecat.com/640/360", 'alt': "A placeholder image of a cat", 'caption': "A cute cat"})
-        self.authors = [AuthorForFrontend(author) for author in item.authors]
-        self.professor = Professor({'name': "Dr. Fake Name", 'professorBio': "This is a fake professor bio.", 'slug': "fake-professor"})
+        self.image = FrontendImage({'url': "https://placecat.com/640/360", 'alt': "A placeholder image of a cat", 'caption': "A cute cat"})
+        self.authors = [FrontendAuthor(author) for author in item.authors]
+        self.professor = FrontendProfessor({'name': "Dr. Fake Name", 'professorBio': "This is a fake professor bio.", 'slug': "fake-professor"})
         self.createdAt = item.published_date
         self.publishedAt = item.published_date
         self.updatedAt = None
         self.lastUpdatedAt = None
-    def write_to_toml(self, file_name: str):
+    def export_to_toml(self, file_name: str):
         with open(f"{file_name}.toml", "w") as f:
-            f.write(self.article_data)
-class Image:
+            f.write(self.generate_article_toml())
+    def generate_article_toml(self):
+        article_data = f"""
+title = "{self.title}"
+description = "{self.description}"
+body = "{self.body}"
+createdAt = "{self.createdAt}"
+publishedAt = "{self.publishedAt}"
+updatedAt = "{self.updatedAt}"
+lastUpdatedAt = "{self.lastUpdatedAt}"
+readingTime = 10
+
+[image]
+url = "{self.image.url}"
+alt = "{self.image.alt}"
+caption = "{self.image.caption}"
+
+"""
+        for author in self.authors:
+            article_data += f"""
+[[authors]]
+name = "{author.name}"
+authorBio = "{author.authorBio}"
+slug = "{author.slug}"
+"""
+        article_data += f"""
+[professor]
+name = "{self.professor.name}"
+professorBio = "{self.professor.professorBio}"
+slug = "{self.professor.slug}"
+"""
+        self.article_data = article_data
+        return article_data
+class FrontendImage:
     def __init__(self, image_data: Dict[str, Any]):
         self.image_data: Dict[str, Any] = image_data
         self.url: str = self.image_data.get('url', '')
         self.alt: str = self.image_data.get('alt', '')
         self.caption: str = self.image_data.get('caption', '')
 
-class AuthorForFrontend:
+class FrontendAuthor:
     def __init__(self, author_data: Author):
         self.name: str = author_data.first_name + " " + author_data.last_name
         self.authorBio: str = "This is a fake author bio."
         self.slug: str = author_data.author_confirmation_id
 
-class Professor:
+class FrontendProfessor:
     def __init__(self, professor_data: Dict[str, Any]):
-        self.name: str = self.professor_data['name']
-        self.professorBio: str = self.professor_data['professorBio']
-        self.slug: str = self.professor_data['slug']
+        self.name: str = professor_data['name']
+        self.professorBio: str = professor_data['professorBio']
+        self.slug: str = professor_data['slug']
 
 
 
@@ -240,9 +272,7 @@ def print_item(item: ChemrxivItem):
 def get_top_10_items_of_the_week():
     return get_all_items()[:10]
 
-def export_to_frontend(item: ChemrxivItem):
-    article = Article(item)
-    article.write_to_toml("testing")
-
+def export_to_frontend(item: ChemrxivItem, file_name: str):
+    return item.to_frontend_article().export_to_toml(file_name)
 
 
