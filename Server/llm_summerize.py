@@ -1,4 +1,3 @@
-
 import json
 import random
 import re
@@ -8,22 +7,29 @@ import os
 import pickle
 from classes import ChemrxivItem, Question
 import typing
+
 open_pickle_file = open("top_10_items_of_the_week.pkl", "rb")
 items = pickle.load(open_pickle_file)
-
 
 
 def summerize_pdf(item: ChemrxivItem):
     paper = item.get_pdf_with_text()
     if paper:
-        return send_to_llm('Explain the following chemistry paper to an undegrade student, write with 5 sentencesw:' + paper + 'in the format of a {response: ""}')
+        return send_to_llm(
+            "Explain the following chemistry paper to an undegrade student, write with 5 sentences:"
+            + paper
+            + 'in the format of a {response: ""}'
+        )
     else:
         return "Error: PDF file not found."
+
+
 def generate_questions(item: ChemrxivItem) -> list[Question]:
     paper = item.get_pdf_with_text()
     if not paper:
         return "Error: PDF file not found."
-    generate_questions_prompt = """
+    generate_questions_prompt = (
+        """
 Generate 10 questions based on the paper and the following course content, the questions should be multiple choice questions with 4 answers, the answers should be in the format of a list of strings, the correct answer should be the first answer in the list, it also must be json format, 
 do not mention the course content in the response, do not respond with anything else than the json, it must be serializable by json.loads()
 response:
@@ -52,48 +58,56 @@ response:
 6. **Thermochemistry and Thermodynamics**  
 7. **Acid-Base and Oxidation-Reduction Reactions**  
 8. **Nuclear Chemistry**
-""" + paper
-        
+"""
+        + paper
+    )
+
     responce = send_to_llm(generate_questions_prompt)
     questions = extract_json(responce)
     if questions:
         return make_questions_from_json(questions)
     else:
         print("No JSON found in the response.")
+
+
 def make_questions_from_json(json_data: dict) -> list[Question]:
     formatted_questions = []
     for question, answers in json_data.items():
-        formatted_questions.append(Question(
-            question=question,
-            answers=random.sample(answers, len(answers)),
-            correct_answer=answers[0]
-        ))
+        formatted_questions.append(
+            Question(
+                question=question,
+                answers=random.sample(answers, len(answers)),
+                correct_answer=answers[0],
+            )
+        )
     return formatted_questions
+
+
 def extract_json(response):
-    json_pattern = re.compile(r'\{.*\}', re.DOTALL)
+    json_pattern = re.compile(r"\{.*\}", re.DOTALL)
     match = json_pattern.search(response)
     if match:
         json_string = match.group(0)
         return json.loads(json_string)
     else:
         return None
+
+
 def send_to_llm(context):
-    load_dotenv(dotenv_path = ".env")
+    load_dotenv(dotenv_path=".env")
     api_key = os.getenv("GEMINI_API_KEY")
     if api_key:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model='gemini-2.0-flash-exp', contents=context)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp", contents=context
+        )
         return response.text
     else:
         print("Error: GEMINI_API_KEY not found in .env file.")
-
-
-
-
 
 
 # print(summerize_pdf(items[0]))
 print(generate_questions(items[0]))
 
 
-
+# TODO: Generate a toml file from CHemx THing
