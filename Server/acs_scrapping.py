@@ -1,7 +1,7 @@
 import os
 import pickle
 from classes import *
-
+from llm_summerize import *
 
 if __name__ == "__main__":
     if os.path.exists("top_10_items_of_the_week.pkl"):
@@ -20,4 +20,5 @@ for item in x:
     print(item.metrics)
     print(item.asset.original.url)
     print("\n")
-export_to_frontend(x[0], '../Client/static/testing')
+questions = generate_questions(x[0])
+export_to_frontend(x[0], questions, '../Client/static/testing')

@@ -1,19 +1,16 @@
 
 import json
-from pprint import pprint
 import random
 import re
-from typing import Optional
 from dotenv import load_dotenv
 from google import genai
 import os
 import pickle
-from pypdf import PdfReader
-import requests
-from classes import ChemrxivItem
-
+from classes import ChemrxivItem, Question
+import typing
 open_pickle_file = open("top_10_items_of_the_week.pkl", "rb")
 items = pickle.load(open_pickle_file)
+
 
 
 def summerize_pdf(item: ChemrxivItem):
@@ -22,27 +19,7 @@ def summerize_pdf(item: ChemrxivItem):
         return send_to_llm('Explain the following chemistry paper to an undegrade student, write with 5 sentencesw:' + paper + 'in the format of a {response: ""}')
     else:
         return "Error: PDF file not found."
-
-
-#TODO: Look into thing thing 
-# import google.generativeai as genai
-# import typing_extensions as typing
-# class Recipe(typing.TypedDict):
-#     recipe_name: str
-#     ingredients: list[str]
-# model = genai.GenerativeModel("gemini-1.5-pro-latest")
-# result = model.generate_content(
-#     "List a few popular cookie recipes.",
-#     generation_config=genai.GenerationConfig(
-#         response_mime_type="application/json", response_schema=list[Recipe]
-#     ),
-# )
-# print(result)
-
-
-
-
-def generate_questions(item: ChemrxivItem):
+def generate_questions(item: ChemrxivItem) -> list[Question]:
     paper = item.get_pdf_with_text()
     if not paper:
         return "Error: PDF file not found."
@@ -83,19 +60,15 @@ response:
         return make_questions_from_json(questions)
     else:
         print("No JSON found in the response.")
-
-
-def make_questions_from_json(json_data: dict):
+def make_questions_from_json(json_data: dict) -> list[Question]:
     formatted_questions = []
     for question, answers in json_data.items():
-        formatted_questions.append({
-            "question": question,
-            "answers": random.sample(answers, len(answers)),
-            "correct_answer": answers[0]
-        })
+        formatted_questions.append(Question(
+            question=question,
+            answers=random.sample(answers, len(answers)),
+            correct_answer=answers[0]
+        ))
     return formatted_questions
-
-
 def extract_json(response):
     json_pattern = re.compile(r'\{.*\}', re.DOTALL)
     match = json_pattern.search(response)
@@ -104,9 +77,6 @@ def extract_json(response):
         return json.loads(json_string)
     else:
         return None
-    
-    
-
 def send_to_llm(context):
     load_dotenv(dotenv_path = ".env")
     api_key = os.getenv("GEMINI_API_KEY")
@@ -119,6 +89,11 @@ def send_to_llm(context):
 
 
 
+
+
+
 # print(summerize_pdf(items[0]))
 print(generate_questions(items[0]))
+
+
 

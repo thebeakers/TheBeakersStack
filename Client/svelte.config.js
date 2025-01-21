@@ -7,11 +7,12 @@ import path from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const articlesDir = path.resolve(__dirname, 'src', '/src/articles');
+const articlesDir = path.resolve(__dirname, 'src', './articles');
 
 const getArticleRoutes = () => {
 	const files = glob.sync('*.toml', { cwd: articlesDir });
 	const articleRoutes = files.map((file) => `/article/${path.parse(file).name}`);
+	console.log('Found files:', articleRoutes);
 	return ['*', ...articleRoutes];
 };
 
@@ -23,9 +24,9 @@ const config = {
 
 	kit: {
 		adapter: adapter(),
-        files: {
-            assets: 'static'
-        },
+		files: {
+			assets: 'static'
+		},
 		prerender: {
 			entries: getArticleRoutes()
 		}

@@ -1,32 +1,29 @@
 import { deserializeArticleFromToml, type Article } from '$lib/types';
+import { fileURLToPath } from 'url';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { glob } from 'glob';
+import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
+export const prerender = true;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const articlesDir = path.resolve(__dirname, '..', '..', '..', 'articles');
-
-export const prerender = true;
 
 export const load: PageServerLoad = async ({ params }) => {
     const { slug } = params;
-    const files = await glob('*.toml', { cwd: articlesDir });
-    const matchingFile = files.find(file => path.parse(file).name === slug);
-
-    if (!matchingFile) {
+    const filePath = path.resolve(__dirname, '../../../../../../../src/articles', `${slug}.toml`);
+    try {
+        const articleToml = await fs.readFile(filePath, 'utf-8');
+        // Deserialize the content into an Article object
+        const article: Article | null = deserializeArticleFromToml(articleToml);
+        if (!article) {
+            throw error(404, 'Article not found');
+        }
+        return {
+            article
+        };
+    } catch (err) {
+        console.error('Error reading file:', err);
         throw error(404, 'Article not found');
     }
-
-    const articleToml = await import(`/src/articles/${matchingFile}?raw`);
-    const article: Article | null = deserializeArticleFromToml(articleToml.default);
-
-    if (!article) {
-        throw error(404, 'Article not found');
-    }
-    return {
-        article
-    };
 };

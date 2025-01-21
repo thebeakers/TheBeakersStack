@@ -50,6 +50,7 @@ export interface Article {
       professorBio: string;
       slug: string;
     };
+    questions: Question[];
     createdAt: string;
     publishedAt: string;
     readingTime: number;

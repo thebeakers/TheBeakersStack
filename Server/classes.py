@@ -5,6 +5,13 @@ from pypdf import PdfReader
 import requests
 import json
 
+
+class Question:
+    def __init__(self, question: str, answers: list[str], correct_answer: str):
+        self.question = question
+        self.answers = answers
+        self.correct_answer = correct_answer
+
 class ChemrxivData:
     def __init__(self, data):
         self.data = data
@@ -38,8 +45,8 @@ class ChemrxivItem:
         self.metrics = [Metric(metric) for metric in self.item_data.get('metrics', [])]
         self.citations_count = self.item_data.get('citationsCount', 0)
         self.community = self.item_data.get('community', '')
-    def to_frontend_article(self):
-        return FrontendArticle(self)
+    def to_frontend_article(self, questions: list[Question]):
+        return FrontendArticle(self, questions)
     def __str__(self):
         return (
             f"Title: {self.title}\n"
@@ -136,13 +143,15 @@ class Metric:
 
 from typing import List, Dict, Any, Optional
 
+
 class FrontendArticle:
-    def __init__(self, item: ChemrxivItem):
+    def __init__(self, item: ChemrxivItem, questions: list[Question]):
         self.title = item.title
         self.description = item.abstract
         self.body = item.abstract
         self.image = FrontendImage({'url': "https://placecat.com/640/360", 'alt': "A placeholder image of a cat", 'caption': "A cute cat"})
         self.authors = [FrontendAuthor(author) for author in item.authors]
+        self.questions = questions
         self.professor = FrontendProfessor({'name': "Dr. Fake Name", 'professorBio': "This is a fake professor bio.", 'slug': "fake-professor"})
         self.createdAt = item.published_date
         self.publishedAt = item.published_date
@@ -201,11 +210,6 @@ class FrontendProfessor:
         self.name: str = professor_data['name']
         self.professorBio: str = professor_data['professorBio']
         self.slug: str = professor_data['slug']
-
-
-
-
-
 
 
 
@@ -272,7 +276,7 @@ def print_item(item: ChemrxivItem):
 def get_top_10_items_of_the_week():
     return get_all_items()[:10]
 
-def export_to_frontend(item: ChemrxivItem, file_name: str):
-    return item.to_frontend_article().export_to_toml(file_name)
+def export_to_frontend(item: ChemrxivItem, questions: list[Question], file_name: str):
+    return item.to_frontend_article(questions).export_to_toml(file_name)
 
 

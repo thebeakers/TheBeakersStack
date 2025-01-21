@@ -38,6 +38,11 @@ name = "Felipe Fantuzzi"
 authorBio = "This is a fake author bio."
 slug = "None"
 
+[[questions]]
+question = "What is the chemical formula of water?"
+answers = ["H2O", "CO2", "NaCl", "CH4"]
+correct_answer = "H2O"
+
 [professor]
 name = "Dr. Fake Name for testing"
 professorBio = "This is a fake professor bio for testing."
