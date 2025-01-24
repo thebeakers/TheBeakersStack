@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Article } from '$lib/types';
 	import type { PageData } from './$types';
+	
 	export let data: PageData;
 	let article: Article | null = data.article;
 </script>
@@ -45,9 +46,3 @@
 		<p>Loading...</p>
 	{/if}
 </main>
-
-<style>
-	:global(body) {
-		font-family: 'Georgia', serif;
-	}
-</style>

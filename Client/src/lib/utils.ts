@@ -2,6 +2,9 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { cubicOut } from "svelte/easing";
 import type { TransitionConfig } from "svelte/transition";
+import { parse } from "toml";
+import { Article } from './types';
+
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -59,4 +62,14 @@ export const flyAndScale = (
 		},
 		easing: cubicOut
 	};
+};
+
+export const deserializeArticleFromToml = (tomlText: string): Article => {
+	try {
+		const parsedData = parse(tomlText);
+		return parsedData as unknown as Article;
+	} catch (error) {
+		console.error('Error deserializing TOML:', error);
+		throw error;
+	}
 };
