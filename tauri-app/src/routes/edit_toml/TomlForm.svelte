@@ -1,37 +1,36 @@
 <script lang="ts">
-	import { Input } from "$lib/components/ui/input";
-	import { Label } from "$lib/components/ui/label";
-	import { Button } from "$lib/components/ui/button";
-	import { Textarea } from "$lib/components/ui/textarea";
-	import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-	import { CalendarIcon } from "lucide-svelte";
-	import { Popover, PopoverContent, PopoverTrigger } from "$lib/components/ui/popover";
-	import { Calendar } from "$lib/components/ui/calendar";
-    function formatDateForInput(date: Date): string {
-	return new Intl.DateTimeFormat("en-US", {
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	}).format(date);
-}
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { Button } from '$lib/components/ui/button';
+	import { Textarea } from '$lib/components/ui/textarea';
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { CalendarIcon } from 'lucide-svelte';
+	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
+	import { Calendar } from '$lib/components/ui/calendar';
+	import { type Article, type Question } from '$lib/types';
+	import { formatDateForInput } from '$lib/utils';
+	import {
+		type DateValue,
+		fromDate,
+		getLocalTimeZone,
+		parseAbsoluteToLocal
+	} from '@internationalized/date';
 
-
-	// Main document data
-	let title: string = $state("Default Title");
-	let description: string = $state("Default Description");
-	let body: string = $state("<p>Default Body</p>");
+	let title: string = $state('Default Title');
+	let description: string = $state('Default Description');
+	let body: string = $state('<p>Default Body</p>');
 	let readingTime: number = $state(10);
-	let createdAt: Date = $state(new Date("2024-02-22T16:40:18.000Z"));
-	let publishedAt: Date = $state(new Date("2024-02-29T16:40:18.000Z"));
-	let updatedAt: Date = $state(new Date());
-	let lastUpdatedAt: Date = $state(new Date());
+	let createdAt: DateValue = $state(parseAbsoluteToLocal('2024-02-22T16:40:18.000Z'));
+	let publishedAt: DateValue = $state(
+		fromDate(new Date('2024-02-29T16:40:18.000Z'), getLocalTimeZone())
+	);
+	let updatedAt: DateValue = $state(fromDate(new Date(), getLocalTimeZone()));
+	let lastUpdatedAt: DateValue = $state(fromDate(new Date(), getLocalTimeZone()));
 
 	// Image section
-	let imageUrl: string = $state("https://placehold.co/600x400");
-	let imageAlt: string = $state("Default Image");
-	let imageCaption: string = $state("Default Caption");
+	let imageUrl: string = $state('https://placehold.co/600x400');
+	let imageAlt: string = $state('Default Image');
+	let imageCaption: string = $state('Default Caption');
 
 	// Authors section
 	interface Author {
@@ -41,41 +40,48 @@
 	}
 	let authors: Author[] = $state([
 		{
-			name: "Default Author",
-			authorBio: "Default Author Bio",
-			slug: "default-author",
-		},
+			name: 'Default Author',
+			authorBio: 'Default Author Bio',
+			slug: 'default-author'
+		}
+	]);
+	let questions: Question[] = $state([
+		{
+			question: 'Default Question',
+			answers: ['Default Answer 1', 'Default Answer 2', 'Default Answer 3'],
+			correct_answer: 'Default Answer'
+		}
 	]);
 
 	// Professor section
-	let professorName: string = $state("Default Professor");
-	let professorBio: string = $state("Default Professor Bio");
-	let professorSlug: string = $state("default-professor");
-
+	let professorName: string = $state('Default Professor');
+	let professorBio: string = $state('Default Professor Bio');
+	let professorSlug: string = $state('default-professor');
 	const handleSubmit = () => {
-		const tomlData = {
+		const ArticleToml: Article = {
 			title,
 			description,
 			body,
-			createdAt: createdAt.toISOString(),
-			publishedAt: publishedAt.toISOString(),
-			updatedAt: updatedAt.toISOString(),
-			lastUpdatedAt: lastUpdatedAt.toISOString(),
+			createdAt: createdAt.toString(),
+			publishedAt: publishedAt.toString(),
+			updatedAt: updatedAt.toString(),
+			lastUpdatedAt: lastUpdatedAt.toString(),
 			readingTime,
 			image: {
 				url: imageUrl,
 				alt: imageAlt,
-				caption: imageCaption,
+				caption: imageCaption
 			},
 			authors: authors,
 			professor: {
 				name: professorName,
 				professorBio: professorBio,
-				slug: professorSlug,
+				slug: professorSlug
 			},
+			questions: questions
 		};
-		
-		console.log("TOML Data:", tomlData);
+
+		console.log('Article TOML Data:', ArticleToml);
 	};
 </script>
 
@@ -89,7 +95,7 @@
 	<!-- Main Document Section -->
 	<Card>
 		<CardHeader>
-			<CardTitle>Main Document</CardTitle>
+			<CardTitle>Edit</CardTitle>
 		</CardHeader>
 		<CardContent class="space-y-4">
 			<div class="space-y-2">
@@ -112,17 +118,15 @@
 				<Input type="number" id="readingTime" bind:value={readingTime} />
 			</div>
 
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div class="space-y-2">
 					<Label>Created At</Label>
 					<Popover>
-						<PopoverTrigger>
-							{#snippet child({ props: triggerProps })}
-								<Button variant="outline" class="w-full justify-start text-left" {...triggerProps}>
-									<CalendarIcon class="mr-2 size-4" />
-									{formatDateForInput(createdAt)}
-								</Button>
-							{/snippet}
+						<PopoverTrigger asChild>
+							<Button variant="outline" class="w-full justify-start text-left">
+								<CalendarIcon class="mr-2 size-4" />
+								{formatDateForInput(createdAt)}
+							</Button>
 						</PopoverTrigger>
 						<PopoverContent class="w-auto p-0">
 							<Calendar bind:value={createdAt} />
@@ -133,13 +137,11 @@
 				<div class="space-y-2">
 					<Label>Published At</Label>
 					<Popover>
-						<PopoverTrigger>
-							{#snippet child({ props: triggerProps })}
-								<Button variant="outline" class="w-full justify-start text-left" {...triggerProps}>
-									<CalendarIcon class="mr-2 size-4" />
-									{formatDateForInput(publishedAt)}
-								</Button>
-							{/snippet}
+						<PopoverTrigger asChild>
+							<Button variant="outline" class="w-full justify-start text-left">
+								<CalendarIcon class="mr-2 size-4" />
+								{formatDateForInput(publishedAt)}
+							</Button>
 						</PopoverTrigger>
 						<PopoverContent class="w-auto p-0">
 							<Calendar bind:value={publishedAt} />
@@ -149,6 +151,7 @@
 			</div>
 		</CardContent>
 	</Card>
+
 
 	<!-- Image Section -->
 	<Card>
@@ -183,10 +186,10 @@
 					authors = [
 						...authors,
 						{
-							name: "",
-							authorBio: "",
-							slug: "",
-						},
+							name: '',
+							authorBio: '',
+							slug: ''
+						}
 					];
 				}}
 			>
@@ -195,18 +198,18 @@
 		</CardHeader>
 		<CardContent class="space-y-6">
 			{#each authors as author, index (index)}
-				<div class="space-y-4 border rounded-lg p-4 relative">
+				<div class="relative space-y-4 rounded-lg border p-4">
 					{#if authors.length > 1}
 						<Button
 							variant="destructive"
 							size="icon"
-							class="absolute -top-2 -right-2"
+							class="absolute -right-2 -top-2"
 							onclick={() => {
 								authors = authors.filter((_, i) => i !== index);
 							}}
 						>
 							<span class="sr-only">Remove author</span>
-							×
+							X
 						</Button>
 					{/if}
 
@@ -249,6 +252,70 @@
 				<Label for="professorSlug">Slug</Label>
 				<Input id="professorSlug" bind:value={professorSlug} />
 			</div>
+		</CardContent>
+	</Card>
+
+	<!-- Question Section -->
+	<Card>
+		<CardHeader class="flex flex-row items-center justify-between">
+			<CardTitle>Questions</CardTitle>
+			<Button
+				variant="outline"
+				onclick={() => {
+					questions = [
+						...questions,
+						{
+							question: '',
+							answers: ['', '', '', ''],
+							correct_answer: ''
+						}
+					];
+				}}
+			>
+				Add Question
+			</Button>
+		</CardHeader>
+		<CardContent class="space-y-6">
+			{#each questions as question, index (index)}
+				<div class="relative space-y-4 rounded-lg border p-4">
+					{#if questions.length > 1}
+						<Button
+							variant="destructive"
+							size="icon"
+							class="absolute -right-2 -top-2"
+							onclick={() => {
+								questions = questions.filter((_, i) => i !== index);
+							}}
+						>
+							<span class="sr-only">Remove Question</span>
+							X
+						</Button>
+					{/if}
+
+					<div class="space-y-2">
+						<Label for={`question-${index}`}>Question {index + 1}</Label>
+						<Textarea id={`question-${index}`} bind:value={question.question} />
+					</div>
+
+					<div class="space-y-2">
+						<Label for={`answers-${index}`}>Answers</Label>
+						{#each question.answers as answer, answerIndex (answerIndex)}
+							<div class="space-y-2">
+								<Label for={`answer-${index}-${answerIndex}`}>Answer {answerIndex + 1}</Label>
+								<Input
+									id={`answer-${index}-${answerIndex}`}
+									bind:value={question.answers[answerIndex]}
+								/>
+							</div>
+						{/each}
+					</div>
+
+					<div class="space-y-2">
+						<Label for={`correct_answer-${index}`}>Correct Answer</Label>
+						<Input id={`correct_answer-${index}`} bind:value={question.correct_answer} />
+					</div>
+				</div>
+			{/each}
 		</CardContent>
 	</Card>
 

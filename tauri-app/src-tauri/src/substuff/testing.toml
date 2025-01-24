@@ -1,0 +1,49 @@
+title = "Ambient temperature isolation of a monoatomic boron(0) complex "
+description = "The first bottleable example of a neutral Group 13 atom bound only by neutral donor ligands (L) has been fully characterized. A two-coordinate paramagnetic L2B0 complex can readily be accessed through a facile reduction reaction and is stabilized by π-accepting cyclic (alkyl)(amino)carbene (CAAC) ligands."
+body = "The first bottleable example of a neutral Group 13 atom bound only by neutral donor ligands (L) has been fully characterized by spectroscopic methods and its structure determined by a single crystal X-ray diffraction study. A two-coordinate paramagnetic L2B0 complex can readily be accessed through a facile reduction reaction and is stabilized by π-accepting cyclic (alkyl)(amino)carbene (CAAC) ligands. Further reduction of (CAAC)2B leads to the isolation of a stable diamagnetic boride anion. In turn, oxidation leads to the putative formation of a transient two-coordinate cationic borylene which has been trapped to form a stable boron(I) complex. Density functional theory calculations support the formulation of (CAAC)2B as a boron(0) complex stabilized by strong multiple bonding."
+createdAt = "2024-12-19T04:50:03.912Z"
+publishedAt = "2024-12-19T04:50:03.912Z"
+updatedAt = "None"
+lastUpdatedAt = "None"
+readingTime = 10
+
+[image]
+url = "https://placecat.com/640/360"
+alt = "A placeholder image of a cat"
+caption = "A cute cat"
+
+
+[[authors]]
+name = "Conor Pranckevicius"
+authorBio = "This is a fake author bio."
+slug = "CO_AUTHOR"
+
+[[authors]]
+name = "William Kennedy"
+authorBio = "This is a fake author bio."
+slug = "None"
+
+[[authors]]
+name = "Vignesh Pattathil"
+authorBio = "This is a fake author bio."
+slug = "None"
+
+[[authors]]
+name = "YuXiang Wei"
+authorBio = "This is a fake author bio."
+slug = "None"
+
+[[authors]]
+name = "Felipe Fantuzzi"
+authorBio = "This is a fake author bio."
+slug = "None"
+
+[[questions]]
+question = "What is the chemical formula of water?"
+answers = ["H2O", "CO2", "NaCl", "CH4"]
+correct_answer = "H2O"
+
+[professor]
+name = "Dr. Fake Name for testing"
+professorBio = "This is a fake professor bio for testing."
+slug = "fake-professor-for-testing"

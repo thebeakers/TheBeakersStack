@@ -18,6 +18,23 @@ pub struct Author {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct Question {
+    pub question: String,
+    pub answers: Vec<Answer>,
+    pub correct_answer: Answer,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+
+pub struct Answer(pub String);
+
+impl Answer {
+    pub fn new(answer: String) -> Self {
+        Answer(answer)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Professor {
     pub name: String,
     #[serde(rename = "professorBio")]
@@ -33,6 +50,7 @@ pub struct Article {
     pub image: Image,
     pub authors: Vec<Author>,
     pub professor: Professor,
+    pub questions: Option<Vec<Question>>,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "publishedAt")]
