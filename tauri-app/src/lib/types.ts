@@ -1,0 +1,1 @@
+../../../Types/Article.ts
