@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Article } from '$lib/types';
 	import type { PageData } from './$types';
-	
+
 	export let data: PageData;
 	let article: Article | null = data.article;
 </script>
@@ -43,6 +43,24 @@
 			</article>
 		</div>
 	{:else}
-		<p>Loading...</p>
+		<div class="mx-auto max-w-4xl p-8 text-center">
+			<h1 class="mb-4 text-4xl font-bold">Woops!</h1>
+			<p class="mb-8 text-lg text-gray-300">
+				We seem to have misplaced this article. It might be a temporary glitch, or the page might
+				have been removed.
+			</p>
+			<p class="mb-4 text-gray-400">Please try one of the following:</p>
+			<ul class="mb-8 text-gray-400">
+				<li class="mb-2">
+					<a href="/" class="text-blue-500 hover:underline">Go back to the homepage</a>
+				</li>
+				<li>
+					<button class="text-blue-500 hover:underline" on:click={() => window.history.back()}
+						>Go back to the previous page</button
+					>
+				</li>
+			</ul>
+			<p class="text-sm text-gray-500">If the problem persists, please contact support.</p>
+		</div>
 	{/if}
 </main>
