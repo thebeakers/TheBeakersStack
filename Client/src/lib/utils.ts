@@ -3,7 +3,7 @@ import { twMerge } from "tailwind-merge";
 import { cubicOut } from "svelte/easing";
 import type { TransitionConfig } from "svelte/transition";
 import { parse } from "toml";
-import { Article } from './types';
+import { type Article } from './types';
 
 
 export function cn(...inputs: ClassValue[]) {

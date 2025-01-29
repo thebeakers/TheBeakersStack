@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import TomlForm from './TomlForm.svelte';
 </script>
 

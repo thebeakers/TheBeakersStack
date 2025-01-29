@@ -1,7 +1,10 @@
 <script lang="ts">
-	import Login from "./Login.svelte";
+	// import Login from './LoginLocal.svelte';
+	import Login from './LoginGit.svelte';
 </script>
 
-<main class="min-h-screen w-full bg-background text-foreground flex items-center justify-center p-4">
+<main
+	class="flex min-h-screen w-full items-center justify-center bg-background p-4 text-foreground"
+>
 	<Login />
 </main>
