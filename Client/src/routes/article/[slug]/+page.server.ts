@@ -1,4 +1,5 @@
-import { deserializeArticleFromToml, type Article } from '$lib/types';
+import { type Article } from '$lib/types';
+import { deserializeArticleFromToml } from "$lib/utils"
 import { fileURLToPath } from 'url';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
