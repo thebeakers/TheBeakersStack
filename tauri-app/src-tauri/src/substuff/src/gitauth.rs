@@ -1,48 +1,19 @@
 use anyhow::{Context, Result};
-use git2::{Cred, FetchOptions, RemoteCallbacks, Repository, StatusOptions};
+use git2::StatusOptions;
 use itertools::Itertools;
-use std::fs;
 use std::path::Path;
 use substuff::*; // Add `itertools` to Cargo.toml
 fn main() {
-    // let dir = Path::new("/tmp/gitstuff/repo");
-    // match clone_or_update_repo(dir) {
-    //     Ok(_) => println!("Operation completed successfully."),
-    //     Err(e) => eprintln!("Operation failed: {}", e),
-    // }
-
-    handle_repo_clone(
+    open_repo(
         Path::new("/tmp/gitstuff/sparce"),
         "https://github.com/thebeakers/TheBeakersStack.git",
     )
     .unwrap();
 }
 
-use std::process::Command;
+fn open_repo(dir_to_clone: &Path, url: &str) -> Result<()> {
 
-fn handle_repo_clone(dir_to_clone: &Path, url: &str) -> Result<()> {
-    let repo_dir = dir_to_clone.to_str().unwrap();
-
-    // // Clone with --filter=none and --no-checkout
-    // Command::new("git")
-    //     .args(["clone", "--filter=blob:none", "--sparse", url, repo_dir])
-    //     .status()
-    //     .context("Failed to clone repository")?;
-
-    // // Change directory into cloned repo and enable sparse checkout
-    // Command::new("git")
-    //     .args([
-    //         "-C",
-    //         repo_dir,
-    //         "sparse-checkout",
-    //         "set",
-    //         "--no-cone",
-    //         "Client/src/articles",
-    //     ])
-    //     .status()
-    //     .context("Failed to add Client/src/articles to sparse checkout")?;
-
-    let repo = Repository::open(dir_to_clone)?;
+    let repo = clone_or_update_repo(dir_to_clone, url).unwrap();
     let binding = repo
         .statuses(Some(&mut StatusOptions::new()))
         .context("Failed to get status")?;

@@ -8,6 +8,7 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
+use std::io;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -272,8 +273,7 @@ fn handle_response(response: Result<Response, Error>) -> Result<Option<String>, 
     }
 }
 
-pub fn clone_or_update_repo(dir_to_clone: &Path) -> Result<git2::Repository> {
-    let url = "https://github.com/thebeakers/TheBeakersStack.git";
+pub fn clone_or_update_repo(dir_to_clone: &Path, url: &str) -> Result<git2::Repository> {
     if dir_to_clone.exists() && dir_to_clone.is_dir() {
         match Repository::open(dir_to_clone) {
             Ok(repo) => Ok(update_existing_repo(repo, dir_to_clone, url)?),
@@ -295,7 +295,7 @@ fn update_existing_repo(
     {
         true => {
             println!("Repository at {:?} is damaged. Re-cloning...", dir_to_clone);
-            return handle_repo_clone(dir_to_clone, url);
+            return Ok(handle_repo_clone(dir_to_clone, url)?);
         }
         false => {
             {
@@ -321,9 +321,34 @@ fn update_existing_repo(
     }
 }
 
-fn handle_repo_clone(dir_to_clone: &Path, url: &str) -> Result<git2::Repository> {
-    println!("The directory exists but is not a valid git repository. Purging and cloning fresh repository...");
-    fs::remove_dir_all(dir_to_clone)
-        .with_context(|| format!("Failed to remove directory: {:?}", dir_to_clone))?;
-    Ok(Repository::clone(url, dir_to_clone)?)
+fn handle_repo_clone(dir_to_clone: &Path, url: &str) -> Result<Repository, git2::Error> {
+    println!("Purging invalid repo (or missing directory) and cloning fresh repository...");
+    match fs::remove_dir_all(dir_to_clone) {
+        Ok(_) => {}
+        Err(e) => match e.kind() {
+            io::ErrorKind::NotFound => match dir_to_clone.parent() {
+                Some(parent) => match fs::create_dir_all(parent) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        return Err(git2::Error::from_str(&format!(
+                            "Failed to create parent directories: {}",
+                            e
+                        )))
+                    }
+                },
+                None => {
+                    return Err(git2::Error::from_str(
+                        "Failed to determine parent directory",
+                    ))
+                }
+            },
+            _ => {
+                return Err(git2::Error::from_str(&format!(
+                    "Failed to remove directory: {}",
+                    e
+                )))
+            }
+        },
+    }
+    Repository::clone(url, dir_to_clone)
 }
