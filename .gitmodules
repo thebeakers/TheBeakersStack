@@ -1,0 +1,3 @@
+[submodule "TheBeakersWebsite"]
+	path = TheBeakersWebsite
+	url = https://github.com/thebeakers/TheBeakersWebsite.git
