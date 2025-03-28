@@ -1,15 +1,15 @@
 use anyhow::{Context, Result};
-use git2::{build::CheckoutBuilder, RebaseOptions, Repository};
+use git2::{Repository, ResetType, Status};
 use reqwest::{
     blocking::{Client, Response},
     header::{HeaderMap, HeaderValue, AUTHORIZATION},
     Error,
 };
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use std::{env, path::PathBuf};
 
 use std::path::Path;
 
@@ -271,59 +271,84 @@ fn handle_response(response: Result<Response, Error>) -> Result<Option<String>, 
         Err(_) => Err(OAuthError::Unknown("Network Error".into())),
     }
 }
-
-pub fn clone_or_update_repo(dir_to_clone: &Path) -> Result<git2::Repository> {
-    let url = "https://github.com/thebeakers/TheBeakersStack.git";
-    if dir_to_clone.exists() && dir_to_clone.is_dir() {
-        match Repository::open(dir_to_clone) {
-            Ok(repo) => Ok(update_existing_repo(repo, dir_to_clone, url)?),
-            Err(_) => Ok(handle_repo_clone(dir_to_clone, url)?),
-        }
-    } else {
-        Ok(handle_repo_clone(dir_to_clone, url)?)
-    }
-}
-
-fn update_existing_repo(
-    repo: git2::Repository,
-    dir_to_clone: &std::path::Path,
-    url: &str,
-) -> Result<Repository> {
-    match repo.state() != git2::RepositoryState::Clean
-        || repo.head().is_err()
-        || !repo.statuses(None)?.is_empty()
-    {
-        true => {
-            println!("Repository at {:?} is damaged. Re-cloning...", dir_to_clone);
-            return handle_repo_clone(dir_to_clone, url);
-        }
+pub fn ensure_repo_is_healthy(url: &str, path: &Path) -> Result<Repository> {
+    // - Open Path as repo, if exist good, else make path and clone repo to it
+    // - Check If need to update, if repo is (healthy && outdated), update it, else, purge everything and start again
+    match path.exists() {
+        true => match path.is_dir() {
+            true => match Repository::open(path) {
+                Ok(x) => return Ok(x),
+                Err(_) => {
+                    fs::remove_dir_all(path)
+                        .context("Could not delete dir")
+                        .unwrap();
+                    fs::create_dir(path)
+                        .context("Could not create dir")
+                        .unwrap();
+                    Repository::clone(url, path).context("Cant Clone Repo into dir :(")
+                }
+            },
+            false => Err(anyhow::anyhow!(
+                "How is the path not a dir? Something really went wrong here please fix it"
+            )),
+        },
         false => {
-            {
-                let mut remote = repo.find_remote("origin")?;
-                remote.fetch(&["main"], None, None)?;
-                let fetch_commit = {
-                    let fetch_head = repo.find_reference("refs/remotes/origin/main")?;
-                    repo.reference_to_annotated_commit(&fetch_head)?
-                };
-                let mut options = RebaseOptions::default();
-                let mut checkout_opts = CheckoutBuilder::new();
-                checkout_opts.force(); // Overwrites any local changes unconditionally
-
-                options.checkout_options(checkout_opts);
-                let mut rebase =
-                    repo.rebase(None, Some(&fetch_commit), None, Some(&mut options))?;
-                while let Some(Ok(_)) = rebase.next() {}
-                rebase.finish(None)?;
-                println!("Repository at {:?} successfully updated.", dir_to_clone);
-            }
-            Ok(repo)
+            fs::create_dir_all(path)
+                .with_context(|| "Cant Make Dir :(")
+                .unwrap();
+            Repository::clone(url, path).with_context(|| "Cant Clone into dir :(")
         }
     }
 }
+pub fn update_repo_or_reset(repo: &mut Repository) -> Result<&mut Repository, git2::Error> {
+    // Step 1: Fetch the latest changes from the remote repository
+    {
+        let remote_name = "origin"; // Assuming the remote is "origin"
+        let mut remote = repo.find_remote(remote_name)?;
 
-fn handle_repo_clone(dir_to_clone: &Path, url: &str) -> Result<git2::Repository> {
-    println!("The directory exists but is not a valid git repository. Purging and cloning fresh repository...");
-    fs::remove_dir_all(dir_to_clone)
-        .with_context(|| format!("Failed to remove directory: {:?}", dir_to_clone))?;
-    Ok(Repository::clone(url, dir_to_clone)?)
+        let mut fetch_opts = git2::FetchOptions::new();
+        let callbacks = git2::RemoteCallbacks::new();
+        fetch_opts.remote_callbacks(callbacks);
+
+        // Fetch the changes from the remote repository
+        remote.fetch(
+            &["refs/heads/main:refs/heads/main"],
+            Some(&mut fetch_opts),
+            None,
+        )?;
+
+        // Step 2: Find the commit on the remote branch "origin/main"
+        let remote_head = repo.find_reference("refs/remotes/origin/main")?;
+        let remote_commit = remote_head.peel_to_commit()?;
+
+        // Step 3: Perform a hard reset to the remote commit (origin/main)
+        repo.reset(&remote_commit.as_object(), ResetType::Hard, None)?;
+
+        println!(
+            "Repository has been reset to the state of origin/main, discarding all local changes."
+        );
+    }
+    Ok(repo)
+}
+pub fn get_changed_articles(repo: &mut Repository) -> Result<Vec<PathBuf>, git2::Error> {
+    repo.statuses(None)?
+        .iter()
+        .filter(|entry| {
+            let status = entry.status();
+            status.intersects(
+                Status::WT_MODIFIED
+                    | Status::INDEX_NEW
+                    | Status::WT_NEW
+                    | Status::WT_DELETED
+                    | Status::WT_RENAMED
+                    | Status::WT_TYPECHANGE,
+            )
+        })
+        .map(|entry| {
+            entry
+                .path()
+                .map(PathBuf::from)
+                .ok_or_else(|| git2::Error::from_str("Invalid path"))
+        })
+        .collect()
 }
