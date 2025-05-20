@@ -1,13 +1,11 @@
 use anyhow::{Context, Result};
 use git2::{Repository, ResetType, Status};
 use reqwest::{
-    blocking::{Client, Response},
     header::{HeaderMap, HeaderValue, AUTHORIZATION},
-    Error,
+    Client, Error as ReqwestError,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::thread::sleep;
 use std::time::{Duration, Instant};
 use std::{env, path::PathBuf};
 
@@ -36,7 +34,6 @@ pub struct Question {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
-
 pub struct Answer(pub String);
 
 impl Answer {
@@ -93,16 +90,11 @@ pub fn list_files_in_github_path(
     repo: &str,
     github_path: &str,
 ) -> Result<Vec<GitHubFile>, Box<dyn std::error::Error>> {
-    // Fetch the GitHub personal access token from environment variables
     let github_token = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN not set");
-
-    // Construct the API URL for the contents endpoint
     let api_url = format!(
         "https://api.github.com/repos/{}/contents/{}",
         repo, github_path
     );
-
-    // Set up headers
     let mut headers = HeaderMap::new();
     headers.insert(
         AUTHORIZATION,
@@ -110,11 +102,9 @@ pub fn list_files_in_github_path(
     );
     headers.insert("User-Agent", HeaderValue::from_static("rust-client"));
 
-    // Make the GET request
-    let client = Client::new();
+    let client = reqwest::blocking::Client::new();
     let response = client.get(&api_url).headers(headers).send()?;
 
-    // Handle response
     if response.status().is_success() {
         let files: Vec<GitHubFile> = response.json()?;
         Ok(files)
@@ -134,7 +124,7 @@ pub struct GithubDeviceCodeResponse {
 }
 
 pub fn start_git_auth() -> Result<GithubDeviceCodeResponse> {
-    let client = Client::new();
+    let client = reqwest::blocking::Client::new();
     let params = [
         ("client_id", "Ov23liELuI9vWwtgYC5f"),
         ("scope", "repo user"),
@@ -161,14 +151,14 @@ pub fn start_git_auth() -> Result<GithubDeviceCodeResponse> {
 #[derive(Debug)]
 pub enum OAuthError {
     AuthorizationPending,
-    SlowDown(u64), // Extra seconds to wait
+    SlowDown,
     ExpiredToken,
     UnsupportedGrantType,
     IncorrectClientCredentials,
     IncorrectDeviceCode,
     AccessDenied,
     DeviceFlowDisabled,
-    Unknown(String), // Fallback for unexpected errors
+    Unknown(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,7 +174,8 @@ pub struct OAuthResponse {
 pub struct GitHubConfig {
     pub client_id: String,
     pub device_code: String,
-    pub interval: u64, // Minimum polling interval in seconds
+    pub interval: u64,
+    pub expires_in: u32, // <-- Added expires_in here
 }
 
 impl GitHubConfig {
@@ -192,18 +183,21 @@ impl GitHubConfig {
         GitHubConfig {
             client_id: "Ov23liELuI9vWwtgYC5f".to_string(),
             device_code: device_code_response.device_code,
-            interval: device_code_response.interval as u64,
+            interval: device_code_response.interval.max(5) as u64,
+            expires_in: device_code_response.expires_in, // <-- Initialize expires_in
         }
     }
 }
 
-pub fn wait_for_github(config: GitHubConfig) -> Result<String, OAuthError> {
+pub async fn wait_for_github(config: GitHubConfig) -> Result<String, OAuthError> {
     let client = Client::new();
     let url = "https://github.com/login/oauth/access_token";
-    let mut interval = config.interval;
-    let deadline = Instant::now() + Duration::from_secs(900); // 15 minutes timeout
+    let mut current_interval_secs = config.interval;
+    // Now config.expires_in is available
+    let deadline = Instant::now() + Duration::from_secs(config.expires_in as u64);
+
     while Instant::now() < deadline {
-        let response = client
+        let response_result = client
             .post(url)
             .header("Accept", "application/json")
             .form(&[
@@ -214,35 +208,35 @@ pub fn wait_for_github(config: GitHubConfig) -> Result<String, OAuthError> {
                     &"urn:ietf:params:oauth:grant-type:device_code".to_string(),
                 ),
             ])
-            .send();
-        match handle_response(response) {
+            .send()
+            .await;
+
+        match handle_response(response_result).await {
             Ok(Some(token)) => return Ok(token),
             Ok(None) => {
-                // Continue polling
+                // AuthorizationPending, continue polling
             }
-            Err(OAuthError::SlowDown(extra)) => {
-                interval += extra + 1;
+            Err(OAuthError::SlowDown) => {
+                current_interval_secs += 5;
             }
             Err(err) => return Err(err),
         }
 
-        sleep(Duration::from_secs(interval));
+        tokio::time::sleep(Duration::from_secs(current_interval_secs)).await;
     }
 
-    Err(OAuthError::ExpiredToken) // Return expired token error if timeout reached
+    Err(OAuthError::ExpiredToken)
 }
 
-fn handle_response(response: Result<Response, Error>) -> Result<Option<String>, OAuthError> {
-    match response {
+async fn handle_response(
+    response_result: Result<reqwest::Response, ReqwestError>,
+) -> Result<Option<String>, OAuthError> {
+    match response_result {
         Ok(resp) => {
             if resp.status().is_success() {
-                let body: OAuthResponse = resp.json().unwrap_or_else(|_| OAuthResponse {
-                    access_token: None,
-                    token_type: None,
-                    scope: None,
-                    error: None,
-                    error_description: None,
-                });
+                let body: OAuthResponse = resp.json().await.map_err(|e| {
+                    OAuthError::Unknown(format!("Failed to deserialize OAuthResponse: {}", e))
+                })?;
 
                 if let Some(token) = body.access_token {
                     return Ok(Some(token));
@@ -250,7 +244,7 @@ fn handle_response(response: Result<Response, Error>) -> Result<Option<String>, 
 
                 match body.error.as_deref() {
                     Some("authorization_pending") => Ok(None),
-                    Some("slow_down") => Ok(None),
+                    Some("slow_down") => Err(OAuthError::SlowDown),
                     Some("expired_token") => Err(OAuthError::ExpiredToken),
                     Some("unsupported_grant_type") => Err(OAuthError::UnsupportedGrantType),
                     Some("incorrect_client_credentials") => {
@@ -259,21 +253,32 @@ fn handle_response(response: Result<Response, Error>) -> Result<Option<String>, 
                     Some("incorrect_device_code") => Err(OAuthError::IncorrectDeviceCode),
                     Some("access_denied") => Err(OAuthError::AccessDenied),
                     Some("device_flow_disabled") => Err(OAuthError::DeviceFlowDisabled),
-                    Some(other) => Err(OAuthError::Unknown(other.to_string())),
-                    None => Ok(None),
+                    Some(other) => Err(OAuthError::Unknown(format!(
+                        "GitHub error: {}. Description: {}",
+                        other,
+                        body.error_description.unwrap_or_else(|| "N/A".to_string())
+                    ))),
+                    None => Err(OAuthError::Unknown(
+                        "Successful response but no token or error code.".to_string(),
+                    )),
                 }
             } else {
-                Err(OAuthError::Unknown(
-                    resp.text().unwrap_or_else(|_| "Unknown error".into()),
-                ))
+                let status = resp.status();
+                let error_text = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error reading response body".into());
+                Err(OAuthError::Unknown(format!(
+                    "HTTP Error {}: {}",
+                    status, error_text
+                )))
             }
         }
-        Err(_) => Err(OAuthError::Unknown("Network Error".into())),
+        Err(e) => Err(OAuthError::Unknown(format!("Network Error: {}", e))),
     }
 }
+
 pub fn ensure_repo_is_healthy(url: &str, path: &Path) -> Result<Repository> {
-    // - Open Path as repo, if exist good, else make path and clone repo to it
-    // - Check If need to update, if repo is (healthy && outdated), update it, else, purge everything and start again
     match path.exists() {
         true => match path.is_dir() {
             true => match Repository::open(path) {
@@ -301,29 +306,20 @@ pub fn ensure_repo_is_healthy(url: &str, path: &Path) -> Result<Repository> {
     }
 }
 pub fn update_repo_or_reset(repo: &mut Repository) -> Result<&mut Repository, git2::Error> {
-    // Step 1: Fetch the latest changes from the remote repository
     {
-        let remote_name = "origin"; // Assuming the remote is "origin"
+        let remote_name = "origin";
         let mut remote = repo.find_remote(remote_name)?;
-
         let mut fetch_opts = git2::FetchOptions::new();
         let callbacks = git2::RemoteCallbacks::new();
         fetch_opts.remote_callbacks(callbacks);
-
-        // Fetch the changes from the remote repository
         remote.fetch(
             &["refs/heads/main:refs/heads/main"],
             Some(&mut fetch_opts),
             None,
         )?;
-
-        // Step 2: Find the commit on the remote branch "origin/main"
         let remote_head = repo.find_reference("refs/remotes/origin/main")?;
         let remote_commit = remote_head.peel_to_commit()?;
-
-        // Step 3: Perform a hard reset to the remote commit (origin/main)
         repo.reset(&remote_commit.as_object(), ResetType::Hard, None)?;
-
         println!(
             "Repository has been reset to the state of origin/main, discarding all local changes."
         );

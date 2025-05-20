@@ -24,6 +24,7 @@
 		"@tailwindcss/forms": "^0.5.10",
 		"@tailwindcss/typography": "^0.5.16",
 		"@tauri-apps/cli": "^2.2.5",
+		"@types/iarna__toml": "^2.0.5",
 		"autoprefixer": "^10.4.20",
 		"bits-ui": "^0.22.0",
 		"clsx": "^2.1.1",
@@ -46,6 +47,7 @@
 	},
 	"packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0",
 	"dependencies": {
+		"@iarna/toml": "^2.2.5",
 		"@tauri-apps/api": "^2.2.0",
 		"zod": "^3.24.1"
 	}

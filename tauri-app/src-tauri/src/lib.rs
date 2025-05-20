@@ -31,15 +31,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_article,
             new_window,
-            test_auth,
+            test_auth, // Will become async
             start_auth,
-            wait_for_auth
+            wait_for_auth // Will become async
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
-// Define the Tauri command
 #[tauri::command]
 fn get_article(file_path: String) -> Result<Article, String> {
     match get_article_from_toml_file(Path::new(&file_path)) {
@@ -47,6 +46,7 @@ fn get_article(file_path: String) -> Result<Article, String> {
         Err(e) => Err(format!("Failed to parse article: {}", e)),
     }
 }
+
 #[tauri::command]
 fn new_window(app: AppHandle) {
     WebviewWindowBuilder::new(
@@ -57,6 +57,7 @@ fn new_window(app: AppHandle) {
     .build()
     .unwrap();
 }
+
 #[derive(serde::Serialize, Clone)]
 struct Payload {
     verification_uri: String,
@@ -64,7 +65,8 @@ struct Payload {
 }
 
 #[tauri::command]
-fn test_auth(app: AppHandle) -> Result<(), InvokeError> {
+async fn test_auth(app: AppHandle) -> Result<(), InvokeError> {
+    // Now async
     let device_code_response = start_git_auth().map_err(|e| InvokeError::from(e.to_string()))?;
 
     app.emit(
@@ -75,60 +77,95 @@ fn test_auth(app: AppHandle) -> Result<(), InvokeError> {
         },
     )
     .map_err(|e| InvokeError::from(e.to_string()))?;
+
     println!(
-        "Please go to {} and enter the code: {}",
+        "test_auth: Please go to {} and enter the code: {}",
         device_code_response.verification_uri, device_code_response.user_code
     );
+
     let config = GitHubConfig::new(device_code_response);
-    match wait_for_github(config) {
+    match substuff::wait_for_github(config).await {
+        // Await the async call
         Ok(token) => {
-            app.emit("auth-responded", token).unwrap();
-            return Ok(());
+            println!("test_auth: Token received successfully.");
+            app.emit("auth-responded", token)
+                .map_err(|e| InvokeError::from(format!("Failed to emit auth-responded: {}", e)))?;
+            Ok(())
         }
         Err(err) => {
-            app.emit("auth-responded", String::new()).unwrap();
-            return Err(InvokeError::from(format!("Error during auth: {:?}", err)));
+            eprintln!("test_auth: Error during GitHub polling: {:?}", err);
+            app.emit("auth-responded", String::new()) // Emit empty on error
+                .map_err(|e| {
+                    InvokeError::from(format!("Failed to emit auth-responded (error case): {}", e))
+                })?;
+            Err(InvokeError::from(format!("Error during auth: {:?}", err)))
         }
     }
 }
 
 #[tauri::command]
-fn start_auth(app: AppHandle) -> Result<(), InvokeError> {
+fn start_auth(app: AppHandle) -> Result<Payload, InvokeError> {
     let device_code_response = start_git_auth().map_err(|e| InvokeError::from(e.to_string()))?;
     let payload = Payload {
         verification_uri: device_code_response.verification_uri.clone(),
         user_code: device_code_response.user_code.clone(),
     };
     let state = app.state::<Mutex<AppState>>();
-    let mut state = state.lock().unwrap();
-    state.github_intermediate = device_code_response.clone();
+    let mut locked_state = state.lock().unwrap();
+    locked_state.github_intermediate = device_code_response.clone();
+    // Log state change
+    println!(
+        "start_auth: AppState github_intermediate updated: {:#?}",
+        locked_state.github_intermediate
+    );
+
     app.emit("auth-started", payload.clone())
         .map_err(|e| InvokeError::from(e.to_string()))?;
-    Ok(())
+    Ok(payload.clone())
 }
 
 #[tauri::command]
-fn wait_for_auth(app: AppHandle) -> Result<String, InvokeError> {
+async fn wait_for_auth(app: AppHandle) -> Result<String, InvokeError> {
+    // Now async
     let state = app.state::<Mutex<AppState>>();
     let device_code_response = state.lock().unwrap().github_intermediate.clone();
+
+    if device_code_response.device_code.is_empty() {
+        eprintln!("wait_for_auth: Error: github_intermediate not set or device_code is empty. Call start_auth first.");
+        return Err(InvokeError::from(
+            "Authentication process not started or state is invalid. Call start_auth first.",
+        ));
+    }
+
     println!(
-        "Please go to {} and enter the code: {}",
+        "wait_for_auth: Polling GitHub. Go to {} and enter code: {}",
         device_code_response.verification_uri, device_code_response.user_code
     );
+
     let config = GitHubConfig::new(device_code_response);
-    match wait_for_github(config) {
+    match substuff::wait_for_github(config).await {
+        // Await the async call
         Ok(token) => {
-            app.emit("auth-responded", &token).unwrap();
+            println!("wait_for_auth: Token received successfully.");
+            app.emit("auth-responded", &token)
+                .map_err(|e| InvokeError::from(format!("Failed to emit auth-responded: {}", e)))?;
             {
-                let mut inner = state.lock().unwrap();
-                inner.github_key = token.clone();
-                println!("{:#?}", inner);
+                let mut inner_state = state.lock().unwrap();
+                inner_state.github_key = token.clone();
+                println!("wait_for_auth: AppState updated with GitHub key.");
             }
-            return Ok(token);
+            Ok(token)
         }
         Err(err) => {
-            app.emit("auth-responded", String::new()).unwrap();
-            return Err(InvokeError::from(format!("Error during auth: {:?}", err)));
+            eprintln!("wait_for_auth: Error during GitHub polling: {:?}", err);
+            app.emit("auth-responded", String::new()) // Emit empty on error
+                .map_err(|e| {
+                    InvokeError::from(format!("Failed to emit auth-responded (error case): {}", e))
+                })?;
+            Err(InvokeError::from(format!(
+                "Error waiting for GitHub auth: {:?}",
+                err
+            )))
         }
     }
 }
