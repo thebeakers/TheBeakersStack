@@ -1,36 +1,24 @@
 <script lang="ts">
 	import { articleStore, githubTokenStore } from '$lib/stores';
-	import type { Article } from '$lib/types'; // This Article type is from your Svelte $lib/types
+	import type { Article } from '$lib/types';
 	import { Button } from '$lib/components/ui/button';
 	import { goto } from '$app/navigation';
-	import { onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
-	// TOML stringify is no longer needed here
 
-	let article: Article | null = null;
-	let ghToken: string | null = null; // Used for UI logic (e.g., disabling button)
+	// Use $state for local component state that changes and triggers UI updates
 	let isUploading = $state(false);
 	let uploadMessage = $state('');
 	let uploadError = $state(false);
 
-	const unsubscribeArticle = articleStore.subscribe((value) => {
-		article = value;
-	});
-	const unsubscribeToken = githubTokenStore.subscribe((value) => {
-		ghToken = value;
-	});
-
-	onDestroy(() => {
-		unsubscribeArticle();
-		unsubscribeToken();
-	});
+	// Svelte 5 allows direct reactive use of store values: $articleStore, $githubTokenStore
+	// No need for manual subscriptions and local variables like `article` and `ghToken`
+	// if they are just mirrors of the store.
 
 	function formatDateString(dateString: string | null | undefined): string {
 		if (!dateString || dateString.trim() === '') {
 			return 'Not set';
 		}
 		try {
-			// Assuming dateString is a valid ISO string or parsable by Date constructor
 			return new Date(dateString).toLocaleDateString(undefined, {
 				year: 'numeric',
 				month: 'long',
@@ -48,21 +36,24 @@
 			.toString()
 			.toLowerCase()
 			.trim()
-			.replace(/\s+/g, '-') // Replace spaces with -
-			.replace(/[^\w-]+/g, '') // Remove all non-word chars
-			.replace(/--+/g, '-') // Replace multiple - with single -
-			.replace(/^-+/, '') // Trim - from start of text
-			.replace(/-+$/, ''); // Trim - from end of text
+			.replace(/\s+/g, '-')
+			.replace(/[^\w-]+/g, '')
+			.replace(/--+/g, '-')
+			.replace(/^-+/, '')
+			.replace(/-+$/, '');
 	}
 
 	const handleUploadToGitHub = async () => {
-		if (!article) {
+		const currentArticle = $articleStore; // Get current value from store reactively
+
+		if (!currentArticle) {
 			uploadMessage = 'Error: No article data to upload.';
 			uploadError = true;
 			return;
 		}
-		// Client-side check for token to manage UI, Rust side will do the definitive check
-		if (!ghToken) {
+
+		const currentGhToken = $githubTokenStore; // Get current value from store reactively
+		if (!currentGhToken) {
 			uploadMessage = 'Error: GitHub token is missing. Please log in again.';
 			uploadError = true;
 			return;
@@ -73,18 +64,14 @@
 		uploadError = false;
 
 		try {
-			const fileName = `${slugify(article.title)}.toml`;
+			const fileName = `${slugify(currentArticle.title)}.toml`;
 
-			uploadMessage = `Uploading article '${article.title}' to GitHub as ${fileName}...`;
+			uploadMessage = `Uploading article '${currentArticle.title}' to GitHub as ${fileName}...`;
 			console.log(`Preparing to upload: ${fileName}`);
-			// For debugging, ensure the article object structure matches Rust's substuff::Article
-			console.log('Article data being sent to Rust:', JSON.parse(JSON.stringify(article)));
+			console.log('Article data being sent to Rust:', JSON.parse(JSON.stringify(currentArticle)));
 
-			// The 'article' object passed here must be serializable by serde
-			// to match the `substuff::Article` struct in Rust.
-			// Ensure field names and types are compatible (e.g., authorBio vs author_bio handled by serde rename).
 			const result = await invoke<string>('upload_article_to_github', {
-				article: article,
+				article: currentArticle,
 				fileName: fileName
 			});
 
@@ -92,7 +79,8 @@
 			uploadError = false;
 		} catch (error: any) {
 			console.error('Error uploading to GitHub:', error);
-			const errorMessage = typeof error === 'string' ? error : error?.message || JSON.stringify(error);
+			const errorMessage =
+				typeof error === 'string' ? error : error?.message || JSON.stringify(error);
 			uploadMessage = `Failed to upload: ${errorMessage}`;
 			uploadError = true;
 		} finally {
@@ -102,7 +90,8 @@
 </script>
 
 <main class="min-h-screen bg-gray-800 p-6 font-serif text-gray-100">
-	{#if article}
+	{#if $articleStore}
+		<!-- Directly use store value for conditional rendering -->
 		<div class="mx-auto mb-8 max-w-4xl text-center">
 			<h1 class="mb-4 text-3xl font-bold text-white">Does this look good?</h1>
 			<p class="text-gray-300">
@@ -121,8 +110,10 @@
 				<Button
 					variant="secondary"
 					onclick={handleUploadToGitHub}
-					disabled={isUploading || !ghToken}
-					title={!ghToken ? 'Please log in with GitHub first' : 'Upload to GitHub repository'}
+					disabled={isUploading || !$githubTokenStore}
+					title={!$githubTokenStore
+						? 'Please log in with GitHub first'
+						: 'Upload to GitHub repository'}
 				>
 					{#if isUploading}
 						<svg
@@ -151,7 +142,8 @@
 					{/if}
 				</Button>
 			</div>
-			{#if !ghToken && !isUploading}
+			<!-- Check against the store value directly -->
+			{#if !$githubTokenStore && !isUploading}
 				<p class="mt-2 text-sm text-yellow-400">
 					GitHub token not found. Please
 					<a href="/" class="underline hover:text-yellow-300">log in via GitHub</a>
@@ -169,48 +161,48 @@
 			{/if}
 		</div>
 
-		<!-- Header Section (Article Display) -->
+		<!-- Header Section (Article Display, using $articleStore directly) -->
 		<div class="mx-auto max-w-4xl">
 			<div class="mb-4">
 				<img
-					src={article.image.url}
-					alt={article.image.alt}
+					src={$articleStore.image.url}
+					alt={$articleStore.image.alt}
 					class="h-auto w-full rounded-md object-cover"
 				/>
 				<p class="mt-2 text-center text-sm italic text-gray-400">
-					{article.image.caption}
+					{$articleStore.image.caption}
 				</p>
 			</div>
-			<h1 class="mb-2 text-4xl font-bold">{article.title}</h1>
-			<p class="mb-4 text-lg text-gray-300">{article.description}</p>
+			<h1 class="mb-2 text-4xl font-bold">{$articleStore.title}</h1>
+			<p class="mb-4 text-lg text-gray-300">{$articleStore.description}</p>
 			<div class="mb-2 text-sm text-gray-400">
 				<span class="font-semibold">Category:</span>
-				{article.category ?? 'N/A'} <!-- Display category if available -->
+				{$articleStore.category ?? 'N/A'}
 			</div>
 			<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400">
-				{#if article.authors && article.authors.length > 0}
+				{#if $articleStore.authors && $articleStore.authors.length > 0}
 					<div>
 						<span class="font-semibold"
 							>Original Paper Written By:
-							{article.authors.map((a) => a.name).join(', ')}</span
+							{$articleStore.authors.map((a) => a.name).join(', ')}</span
 						>
 					</div>
 				{/if}
-				<div>| Published on {formatDateString(article.publishedAt)}</div>
-				<div>| {article.readingTime} min read</div>
-				{#if article.updatedAt} <!-- Check for existence, not just empty string -->
-					<div>| Updated on {formatDateString(article.updatedAt)}</div>
+				<div>| Published on {formatDateString($articleStore.publishedAt)}</div>
+				<div>| {$articleStore.readingTime} min read</div>
+				{#if $articleStore.updatedAt}
+					<div>| Updated on {formatDateString($articleStore.updatedAt)}</div>
 				{/if}
-				{#if article.lastUpdatedAt} <!-- Check for existence -->
+				{#if $articleStore.lastUpdatedAt}
 					<div>
-						| Last Content Update: {formatDateString(article.lastUpdatedAt)}
+						| Last Content Update: {formatDateString($articleStore.lastUpdatedAt)}
 					</div>
 				{/if}
 			</div>
 			<div class="mb-6 mt-1 flex flex-wrap items-center text-sm text-gray-400">
-				<span class="font-semibold">Reviewed by: {article.professor.name}</span>
-				{#if article.professor.professorBio}
-					<span class="italic"> - {article.professor.professorBio}</span>
+				<span class="font-semibold">Reviewed by: {$articleStore.professor.name}</span>
+				{#if $articleStore.professor.professorBio}
+					<span class="italic"> - {$articleStore.professor.professorBio}</span>
 				{/if}
 			</div>
 		</div>
@@ -222,7 +214,7 @@
 					class="prose"
 					style="--tw-prose-body: inherit; --tw-prose-headings: inherit; --tw-prose-links: theme(colors.blue.400); --tw-prose-bold: inherit; --tw-prose-counters: inherit; --tw-prose-bullets: inherit; --tw-prose-hr: inherit; --tw-prose-quotes: inherit; --tw-prose-quote-borders: inherit; --tw-prose-captions: inherit; --tw-prose-kbd: inherit; --tw-prose-kbd-shadows: inherit; --tw-prose-code: inherit; --tw-prose-pre-code: inherit; --tw-prose-pre-bg: inherit; --tw-prose-th-borders: inherit; --tw-prose-td-borders: inherit; --tw-prose-invert-body: inherit; --tw-prose-invert-headings: inherit; --tw-prose-invert-links: theme(colors.blue.300); --tw-prose-invert-bold: inherit; --tw-prose-invert-counters: inherit; --tw-prose-invert-bullets: inherit; --tw-prose-invert-hr: inherit; --tw-prose-invert-quotes: inherit; --tw-prose-invert-quote-borders: inherit; --tw-prose-invert-captions: inherit; --tw-prose-invert-kbd: inherit; --tw-prose-invert-kbd-shadows: inherit; --tw-prose-invert-code: inherit; --tw-prose-invert-pre-code: inherit; --tw-prose-invert-pre-bg: inherit; --tw-prose-invert-th-borders: inherit; --tw-prose-invert-td-borders: inherit;"
 				>
-					{@html article.body
+					{@html $articleStore.body
 						.replaceAll(
 							'<h1>',
 							'<h1 class="mt-12 mb-6 text-3xl md:text-4xl font-extrabold leading-relaxed">'
@@ -251,10 +243,10 @@
 		</div>
 
 		<!-- Questions Section -->
-		{#if article.questions && article.questions.length > 0}
+		{#if $articleStore.questions && $articleStore.questions.length > 0}
 			<div class="mx-auto mt-10 max-w-4xl">
 				<h2 class="mb-6 text-2xl font-bold text-gray-200">Review Questions</h2>
-				{#each article.questions as q, i}
+				{#each $articleStore.questions as q, i}
 					<div class="mb-6 rounded-lg border border-gray-700 bg-gray-700/30 p-4 shadow">
 						<p class="mb-2 font-semibold text-gray-200">
 							Question {i + 1}: {q.question}

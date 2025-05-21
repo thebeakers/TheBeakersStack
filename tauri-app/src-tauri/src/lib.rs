@@ -193,7 +193,7 @@ async fn upload_article_to_github(
 
     let owner = "thebeakers";
     let repo_name = "TheBeakersWebsite";
-    let path_in_repo = format!("src/content/articles/{}", file_name);
+    let path_in_repo = format!("src/articles/{}", file_name);
     let commit_message = format!("docs: add/update article '{}' via editor", article.title);
 
     let toml_content = match toml::to_string_pretty(&article) {

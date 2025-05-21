@@ -2,24 +2,22 @@
 	import { goto } from '$app/navigation';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte'; // onDestroy added
+	import { githubTokenStore } from '$lib/stores'; // Import the store
 
-	let verificationUri = '';
-	let userCode = '';
-	let token = ''; // This will store the final access token
+	let verificationUri = $state(''); // Svelte 5
+	let userCode = $state(''); // Svelte 5
 
-	let authStep: 'initial' | 'awaiting_user_action' | 'authenticated' | 'error' = 'initial';
-	let authError = '';
-	let isLoading = false; // To disable button during async operations
+	let authStep = $state<'initial' | 'awaiting_user_action' | 'authenticated' | 'error'>('initial'); // Svelte 5
+	let authError = $state(''); // Svelte 5
+	let isLoading = $state(false); // Svelte 5
+
+	let unlistenStartedFn: UnlistenFn | null = null;
+	let unlistenRespondedFn: UnlistenFn | null = null;
 
 	onMount(() => {
-		// Make onMount callback synchronous
 		console.log('LoginGit.svelte: onMount - component mounted');
 
-		let unlistenStartedFn: UnlistenFn | null = null;
-		let unlistenRespondedFn: UnlistenFn | null = null;
-
-		// Use an IIAFE for async setup
 		(async () => {
 			try {
 				console.log('LoginGit.svelte: Listening for auth events (async setup)');
@@ -31,7 +29,7 @@
 						'Payload:',
 						event.payload
 					);
-					if (authStep === 'initial' && event.payload) {
+					if (event.payload) {
 						const payload = event.payload as {
 							verification_uri: string;
 							user_code: string;
@@ -39,7 +37,7 @@
 						if (payload.verification_uri && payload.user_code) {
 							verificationUri = payload.verification_uri;
 							userCode = payload.user_code;
-							// Do not change authStep here, onSubmit will handle it and then call wait_for_auth
+							// authStep will be set to 'awaiting_user_action' in onSubmit
 						}
 					}
 				});
@@ -53,7 +51,8 @@
 					);
 					isLoading = false;
 					if (event.payload && typeof event.payload === 'string' && event.payload !== '') {
-						token = event.payload as string;
+						const receivedToken = event.payload as string;
+						githubTokenStore.set(receivedToken); // <--- UPDATE THE STORE
 						authStep = 'authenticated';
 						verificationUri = '';
 						userCode = '';
@@ -62,7 +61,7 @@
 					} else {
 						authError = 'Authentication failed or polling timed out. Please try again.';
 						authStep = 'error';
-						token = '';
+						githubTokenStore.set(null); // <--- Clear the store on error
 						console.error(
 							'LoginGit.svelte: auth-responded: Failure or empty payload. authStep set to error. Payload:',
 							event.payload
@@ -92,6 +91,12 @@
 		};
 	});
 
+	// Explicit onDestroy for clarity, though onMount's return function handles it.
+	onDestroy(() => {
+		if (unlistenStartedFn) unlistenStartedFn();
+		if (unlistenRespondedFn) unlistenRespondedFn();
+	});
+
 	const onSubmit = async () => {
 		if (isLoading) return;
 
@@ -100,7 +105,7 @@
 		authStep = 'initial';
 		verificationUri = '';
 		userCode = '';
-		token = '';
+		githubTokenStore.set(null); // Clear token at start of new attempt
 		authError = '';
 
 		try {
@@ -122,12 +127,31 @@
 				);
 
 				console.log('LoginGit.svelte: onSubmit: Invoking wait_for_auth to start polling...');
+				// The 'auth-responded' event is the primary handler for the token.
+				// This invoke call's resolution mainly signals completion or direct error from polling setup.
 				invoke('wait_for_auth')
-					.then((receivedToken) => {
+					.then((receivedTokenIfSuccessful) => {
 						console.log(
-							'LoginGit.svelte: invoke(wait_for_auth) promise resolved with:',
-							receivedToken
+							'LoginGit.svelte: invoke(wait_for_auth) promise resolved.',
+							'Token from promise (event is primary):',
+							receivedTokenIfSuccessful
 						);
+						// If authStep is still 'awaiting_user_action', it means the event might not have fired
+						// or this resolved first. We can try to set auth state here as a fallback.
+						if (authStep === 'awaiting_user_action') {
+							if (
+								typeof receivedTokenIfSuccessful === 'string' &&
+								receivedTokenIfSuccessful !== ''
+							) {
+								githubTokenStore.set(receivedTokenIfSuccessful); // Ensure store is set
+								authStep = 'authenticated';
+							} else if (!githubTokenStore) {
+								// If store is still null
+								authError = 'Polling completed but no valid token was confirmed.';
+								authStep = 'error';
+							}
+						}
+						isLoading = false; // Ensure loading is stopped
 					})
 					.catch((pollingError) => {
 						console.error(
@@ -138,8 +162,9 @@
 							authError =
 								(pollingError as Error)?.message || 'Polling for authentication token failed.';
 							authStep = 'error';
-							isLoading = false; // Ensure isLoading is reset on polling setup error
+							githubTokenStore.set(null);
 						}
+						isLoading = false;
 					});
 			} else {
 				throw new Error('Invalid payload received from start_auth command');
@@ -149,6 +174,7 @@
 			authError = e.message || 'Failed to start GitHub authentication. Please try again.';
 			authStep = 'error';
 			isLoading = false;
+			githubTokenStore.set(null);
 		}
 	};
 </script>
