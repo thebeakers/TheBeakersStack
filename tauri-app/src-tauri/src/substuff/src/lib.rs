@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use git2::{Repository, ResetType, Status};
+use log; // Added for logging
 use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION},
-    Client, Error as ReqwestError,
+    Client, Error as ReqwestError, StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -29,18 +31,20 @@ pub struct Author {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Question {
     pub question: String,
-    pub answers: Vec<Answer>,
-    pub correct_answer: Answer,
+    pub answers: Vec<String>, // MODIFIED: Was Vec<Answer>
+    #[serde(rename = "correct_answer")]
+    pub correct_answer: String, // MODIFIED: Was Answer
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Answer(pub String);
-
-impl Answer {
-    pub fn new(answer: String) -> Self {
-        Answer(answer)
-    }
-}
+// REMOVED Answer struct as it's no longer needed
+// #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+// pub struct Answer(pub String);
+//
+// impl Answer {
+//     pub fn new(answer: String) -> Self {
+//         Answer(answer)
+//     }
+// }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Professor {
@@ -69,6 +73,7 @@ pub struct Article {
     pub updated_at: Option<String>,
     #[serde(rename = "lastUpdatedAt")]
     pub last_updated_at: Option<String>,
+    pub category: String, // ADDED category field
 }
 
 pub fn get_article_from_toml_file(file_path: &Path) -> Result<Article> {
@@ -87,13 +92,13 @@ pub struct GitHubFile {
 }
 
 pub fn list_files_in_github_path(
-    repo: &str,
+    repo_name_with_owner: &str, // Changed to "owner/repo" format
     github_path: &str,
 ) -> Result<Vec<GitHubFile>, Box<dyn std::error::Error>> {
     let github_token = env::var("GITHUB_TOKEN").expect("GITHUB_TOKEN not set");
     let api_url = format!(
         "https://api.github.com/repos/{}/contents/{}",
-        repo, github_path
+        repo_name_with_owner, github_path
     );
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -175,7 +180,7 @@ pub struct GitHubConfig {
     pub client_id: String,
     pub device_code: String,
     pub interval: u64,
-    pub expires_in: u32, // <-- Added expires_in here
+    pub expires_in: u32,
 }
 
 impl GitHubConfig {
@@ -184,7 +189,7 @@ impl GitHubConfig {
             client_id: "Ov23liELuI9vWwtgYC5f".to_string(),
             device_code: device_code_response.device_code,
             interval: device_code_response.interval.max(5) as u64,
-            expires_in: device_code_response.expires_in, // <-- Initialize expires_in
+            expires_in: device_code_response.expires_in,
         }
     }
 }
@@ -193,7 +198,6 @@ pub async fn wait_for_github(config: GitHubConfig) -> Result<String, OAuthError>
     let client = Client::new();
     let url = "https://github.com/login/oauth/access_token";
     let mut current_interval_secs = config.interval;
-    // Now config.expires_in is available
     let deadline = Instant::now() + Duration::from_secs(config.expires_in as u64);
 
     while Instant::now() < deadline {
@@ -347,4 +351,214 @@ pub fn get_changed_articles(repo: &mut Repository) -> Result<Vec<PathBuf>, git2:
                 .ok_or_else(|| git2::Error::from_str("Invalid path"))
         })
         .collect()
+}
+
+// Structs for GitHub API interaction (file upload)
+#[derive(Serialize, Debug)]
+struct GitHubPutFileRequest<'a> {
+    message: &'a str,
+    content: String, // Base64 encoded
+    sha: Option<String>,
+    committer: Committer<'a>,
+}
+
+#[derive(Serialize, Debug)]
+struct Committer<'a> {
+    name: &'a str,
+    email: &'a str,
+}
+
+#[derive(Deserialize, Debug)]
+struct GitHubFileGetResponse {
+    sha: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct GitHubErrorResponse {
+    message: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct GitHubPutFileResponse {
+    commit: GitHubCommitInfo,
+}
+
+#[derive(Deserialize, Debug)]
+struct GitHubCommitInfo {
+    sha: String,
+    message: String,
+}
+
+pub async fn upload_file_to_github(
+    token: &str,
+    owner: &str,
+    repo: &str,
+    path_in_repo: &str,
+    commit_message: &str,
+    file_content: &str,
+) -> Result<String, String> {
+    let client = Client::new();
+    let api_url = format!(
+        "https://api.github.com/repos/{}/{}/contents/{}",
+        owner, repo, path_in_repo
+    );
+
+    log::debug!("Attempting to GET file info from: {}", api_url);
+    let get_response = client
+        .get(&api_url)
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "TauriProfessorApp/0.1.0")
+        .send()
+        .await;
+
+    let mut current_sha: Option<String> = None;
+
+    match get_response {
+        Ok(resp) => {
+            log::debug!(
+                "GET response status for {}: {}",
+                path_in_repo,
+                resp.status()
+            );
+            if resp.status() == StatusCode::OK {
+                match resp.json::<GitHubFileGetResponse>().await {
+                    Ok(file_data) => {
+                        current_sha = Some(file_data.sha);
+                        log::info!(
+                            "File {} exists, SHA: {}",
+                            path_in_repo,
+                            current_sha.as_ref().unwrap()
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to parse GET response for {}: {}. Assuming new file.",
+                            path_in_repo,
+                            e
+                        );
+                    }
+                }
+            } else if resp.status() == StatusCode::NOT_FOUND {
+                log::info!("File {} not found. Will create a new file.", path_in_repo);
+            } else {
+                let status = resp.status();
+                let error_text = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error reading response body".into());
+                log::error!(
+                    "Failed to get file info for {}: {} - {}",
+                    path_in_repo,
+                    status,
+                    error_text
+                );
+                return Err(format!(
+                    "GitHub API error (GET {}): {} - {}",
+                    path_in_repo, status, error_text
+                ));
+            }
+        }
+        Err(e) => {
+            log::error!(
+                "Network error while getting file info for {}: {}",
+                path_in_repo,
+                e
+            );
+            return Err(format!("Network error (GET {}): {}", path_in_repo, e));
+        }
+    }
+
+    let encoded_content = BASE64_STANDARD.encode(file_content.as_bytes());
+
+    let request_body = GitHubPutFileRequest {
+        message: commit_message,
+        content: encoded_content,
+        sha: current_sha.clone(),
+        committer: Committer {
+            name: "Professor App",       // Using a fixed committer name
+            email: "app@thebeakers.com", // Using a fixed committer email
+        },
+    };
+
+    log::debug!("Preparing to PUT file to: {}", api_url);
+    log::debug!(
+        "PUT request body: message='{}', sha='{:?}'",
+        request_body.message,
+        request_body.sha
+    );
+
+    let put_response = client
+        .put(&api_url)
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "TauriProfessorApp/0.1.0")
+        .json(&request_body)
+        .send()
+        .await;
+
+    match put_response {
+        Ok(resp) => {
+            let status = resp.status();
+            log::debug!("PUT response status for {}: {}", path_in_repo, status);
+            if status == StatusCode::OK || status == StatusCode::CREATED {
+                match resp.json::<GitHubPutFileResponse>().await {
+                    Ok(put_file_response) => {
+                        let action = if current_sha.is_some() {
+                            "updated"
+                        } else {
+                            "created"
+                        };
+                        let success_msg = format!(
+                            "File {} successfully {} in {}/{}. Commit SHA: {}",
+                            path_in_repo, action, owner, repo, put_file_response.commit.sha
+                        );
+                        log::info!("{}", success_msg);
+                        Ok(success_msg)
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to parse successful PUT response for {}: {}",
+                            path_in_repo,
+                            e
+                        );
+                        Err(format!(
+                            "Failed to parse GitHub API response (PUT {}): {}",
+                            path_in_repo, e
+                        ))
+                    }
+                }
+            } else {
+                let error_body_text = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Could not read error response body".to_string());
+                log::error!(
+                    "Raw error response body for PUT {}: {}",
+                    path_in_repo,
+                    error_body_text
+                );
+                let error_message = serde_json::from_str::<GitHubErrorResponse>(&error_body_text)
+                    .map(|gh_error| gh_error.message)
+                    .unwrap_or_else(|_| error_body_text);
+
+                log::error!(
+                    "Failed to upload file {}: {} - {}",
+                    path_in_repo,
+                    status,
+                    error_message
+                );
+                Err(format!(
+                    "GitHub API error (PUT {}): {} - {}",
+                    path_in_repo, status, error_message
+                ))
+            }
+        }
+        Err(e) => {
+            log::error!("Network error while uploading file {}: {}", path_in_repo, e);
+            Err(format!("Network error (PUT {}): {}", path_in_repo, e))
+        }
+    }
 }

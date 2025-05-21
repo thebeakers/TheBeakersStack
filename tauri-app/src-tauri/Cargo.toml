@@ -25,3 +25,4 @@ tauri = { version = "2.2.3", features = [] }
 tauri-plugin-log = "2.0.0-rc"
 substuff = { path = "./src/substuff" }
 anyhow = "1.0.95"
+toml = "0.8.22"
